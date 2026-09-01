@@ -10,8 +10,8 @@ defmodule Eva.Extension.DesktopMac.Tools do
   alias Eva.Core.Agent.{Messages, Tools}
   alias Eva.Extension.DesktopMac.Helper
 
-  @kinds ["click", "type", "key", "scroll", "wait", "double_click", "drag"]
-  @keys ~w(CMD COMMAND SHIFT OPTION ALT CTRL CONTROL ENTER TAB ESCAPE SPACE DELETE BACKSPACE UP DOWN LEFT RIGHT) ++
+  @kinds ["click", "type", "key", "press", "scroll", "wait", "double_click", "drag"]
+  @keys ~w(CMD COMMAND SHIFT OPTION ALT CTRL CONTROL ENTER RETURN TAB ESCAPE SPACE DELETE BACKSPACE UP DOWN LEFT RIGHT) ++
           Enum.map(?A..?Z, &<<&1>>) ++ Enum.map(0..9, &Integer.to_string/1)
   @modifiers ~w(CMD COMMAND SHIFT OPTION ALT CTRL CONTROL)
 
@@ -67,7 +67,7 @@ defmodule Eva.Extension.DesktopMac.Tools do
       %Tools.AgentTool{
         name: "desktop_action",
         description:
-          "Perform a single desktop action — click, type, key, scroll, wait, double_click, " <>
+          "Perform a single desktop action — click, type, key/press, scroll, wait, double_click, " <>
             "or drag — against the observation referenced by observation_id, then capture a " <>
             "fresh screenshot and return a new observation_id.",
         input_schema: action_schema(),
@@ -230,7 +230,7 @@ defmodule Eva.Extension.DesktopMac.Tools do
     end
   end
 
-  defp validate_kind("key", args) do
+  defp validate_kind(kind, args) when kind in ["key", "press"] do
     keys = args["keys"]
 
     cond do
@@ -298,7 +298,11 @@ defmodule Eva.Extension.DesktopMac.Tools do
         "button" => %{"type" => "string", "enum" => ["left", "right"]},
         "text" => %{"type" => "string"},
         "replace" => %{"type" => "boolean"},
-        "keys" => %{"type" => "array", "items" => %{"type" => "string"}},
+        "keys" => %{
+          "type" => "array",
+          "items" => %{"type" => "string"},
+          "description" => "Case-insensitive key names; ENTER and RETURN are equivalent"
+        },
         "delta_x" => %{"type" => "number"},
         "delta_y" => %{"type" => "number"},
         "path" => %{

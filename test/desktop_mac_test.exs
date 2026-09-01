@@ -35,7 +35,15 @@ defmodule Eva.Extension.DesktopMacTest do
     action = Enum.find(Tools.definitions(), &(&1.name == "desktop_action"))
     kinds = get_in(action.input_schema, ["properties", "kind", "enum"])
 
-    assert kinds == ["click", "type", "key", "scroll", "wait", "double_click", "drag"]
+    assert kinds == ["click", "type", "key", "press", "scroll", "wait", "double_click", "drag"]
+  end
+
+  test "desktop_action advertises common key aliases" do
+    action = Enum.find(Tools.definitions(), &(&1.name == "desktop_action"))
+    description = get_in(action.input_schema, ["properties", "keys", "description"])
+
+    assert description =~ "ENTER"
+    assert description =~ "RETURN"
   end
 
   test "desktop_action requires kind and observation_id" do

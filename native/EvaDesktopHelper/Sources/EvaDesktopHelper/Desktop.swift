@@ -309,7 +309,7 @@ enum Desktop {
                 imageHeight: capture.2
             )
         }
-        let observationID = UUID().uuidString.lowercased()
+        let observationID = newObservationID()
         currentObservation = ObservationContext(
             id: observationID,
             display: display,
@@ -678,7 +678,7 @@ enum Desktop {
         case "click": try click(params, observation, count: 1)
         case "double_click": try click(params, observation, count: 2)
         case "type": try typeText(params, observation)
-        case "key":
+        case "key", "press":
             guard let values = params["keys"]?.arrayValue,
                   !values.isEmpty, values.count <= 8,
                   values.allSatisfy({ $0.stringValue != nil }) else {
@@ -816,7 +816,7 @@ enum Desktop {
         "C": 8, "V": 9, "B": 11, "Q": 12, "W": 13, "E": 14, "R": 15,
         "Y": 16, "T": 17, "1": 18, "2": 19, "3": 20, "4": 21, "6": 22,
         "5": 23, "9": 25, "7": 26, "8": 28, "0": 29, "O": 31, "U": 32,
-        "I": 34, "P": 35, "ENTER": 36, "L": 37, "J": 38, "K": 40, "N": 45,
+        "I": 34, "P": 35, "ENTER": 36, "RETURN": 36, "L": 37, "J": 38, "K": 40, "N": 45,
         "M": 46, "TAB": 48, "SPACE": 49, "BACKSPACE": 51, "DELETE": 51,
         "ESCAPE": 53, "LEFT": 123, "RIGHT": 124, "DOWN": 125, "UP": 126
     ]
@@ -849,6 +849,10 @@ enum Desktop {
             down.flags = flags; up.flags = flags
             down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
         }
+    }
+
+    static func newObservationID() -> String {
+        String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12)).lowercased()
     }
 
     private static func scroll(_ params: [String: JSONValue]) throws {

@@ -104,6 +104,13 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(point?.y, 660)
     }
 
+    func testObservationIDsAreCompactHex() {
+        let id = Desktop.newObservationID()
+
+        XCTAssertEqual(id.count, 12)
+        XCTAssertTrue(id.allSatisfy(\.isHexDigit))
+    }
+
     func testCoordinateMappingRejectsScreenshotBounds() {
         let frame = RectInfo(x: 0, y: 0, width: 100, height: 50)
         XCTAssertNil(Desktop.screenPoint(x: -1, y: 0, imageWidth: 200, imageHeight: 100, frame: frame))
