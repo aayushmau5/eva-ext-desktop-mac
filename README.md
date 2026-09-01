@@ -1,5 +1,7 @@
 # eva-ext-desktop-mac
 
+https://github.com/user-attachments/assets/5b87625a-bff2-46d7-8e41-70156b4c2460
+
 A macOS-only [Eva](https://github.com/aayushmau5/eva) project extension named `desktop_mac`.
 It lets an Eva agent inspect the current macOS desktop — screenshot it, read the frontmost
 application's accessibility hierarchy — and act on it by clicking controls or coordinates,
