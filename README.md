@@ -11,8 +11,7 @@ enabled/paused state, and is the only place automation can be turned on.
 
 ## Status
 
-The local MVP (Phases 0–5) is implemented. The extension registers exactly three sequential
-tools:
+The extension registers exactly three sequential tools:
 
 - `desktop_status` reports permission, automation, foreground-app, and display state.
 - `desktop_observe` returns a JPEG screenshot plus a bounded accessibility snapshot and
@@ -20,14 +19,22 @@ tools:
 - `desktop_action` performs one click, type, key, scroll, wait, double-click, or drag and
   returns a fresh observation.
 
-Coordinate actions refer to pixels in the latest screenshot. They are mapped into the
-selected display's global macOS point coordinates, including Retina scaling and displays
-whose origins are not `(0, 0)`. The screenshot cursor is hidden.
+Accessibility element frames and coordinate actions use pixels in the latest screenshot.
+They are mapped into the selected display's global macOS point coordinates, including Retina
+scaling and displays whose origins are not `(0, 0)`. Prefer semantic element references over
+coordinates when a matching reference exists. The screenshot cursor is hidden.
+
+The helper requests enhanced accessibility from Chromium-based browsers so their webpage
+controls are included alongside browser chrome when the browser supports it.
 
 Observation payloads are intentionally bounded: screenshots use JPEG quality 0.68 with a
 1280-pixel longest edge, accessibility snapshots return at most 200 elements, and text
 fields are capped at 200 characters. At most 50 static-text/row/cell entries are returned so
 controls retain most of the snapshot budget.
+
+Before each provider request, the extension replaces superseded screenshot-bearing desktop
+observations with a short marker and keeps only the latest observation. The saved transcript,
+desktop errors, and images returned by other tools remain unchanged.
 
 The helper starts paused. Only its menu-bar menu can enable automation, and enablement
 expires after ten minutes. It also pauses when the extension disconnects. Actions reject a

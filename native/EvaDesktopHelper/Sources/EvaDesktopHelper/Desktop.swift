@@ -163,6 +163,7 @@ enum Desktop {
     private static let maximumTreeDepth = 12
     private static let maximumTextLength = 200
     private static var currentObservation: ObservationContext?
+    private static var enhancedAccessibilityPIDs: Set<pid_t> = []
 
     static func status() -> Status {
         Status(
@@ -203,6 +204,23 @@ enum Desktop {
         return CGPoint(
             x: frame.x + x / Double(imageWidth) * frame.width,
             y: frame.y + y / Double(imageHeight) * frame.height
+        )
+    }
+
+    static func imageRect(
+        _ rect: RectInfo,
+        imageWidth: Int,
+        imageHeight: Int,
+        frame: RectInfo
+    ) -> RectInfo? {
+        guard imageWidth > 0, imageHeight > 0, frame.width > 0, frame.height > 0 else {
+            return nil
+        }
+        return RectInfo(
+            x: (rect.x - frame.x) / frame.width * Double(imageWidth),
+            y: (rect.y - frame.y) / frame.height * Double(imageHeight),
+            width: rect.width / frame.width * Double(imageWidth),
+            height: rect.height / frame.height * Double(imageHeight)
         )
     }
 
@@ -283,7 +301,14 @@ enum Desktop {
         }
 
         let app = frontmostApp()
-        let snapshot = app.map { accessibilitySnapshot(pid_t($0.pid)) }
+        let snapshot = app.map {
+            accessibilitySnapshot(
+                pid_t($0.pid),
+                display: display,
+                imageWidth: capture.1,
+                imageHeight: capture.2
+            )
+        }
         let observationID = UUID().uuidString.lowercased()
         currentObservation = ObservationContext(
             id: observationID,
@@ -355,6 +380,7 @@ enum Desktop {
                 ))
             }
         } catch let failure as DesktopFailure {
+            if preservesObservation(after: failure) { currentObservation = observation }
             return .failure(failure)
         } catch {
             return .failure(DesktopFailure(code: "input_failed", message: error.localizedDescription))
@@ -468,12 +494,23 @@ enum Desktop {
             (!lowPriorityRoles.contains(role) || lowPriorityCount < maximumLowPriorityElements)
     }
 
-    private static func accessibilitySnapshot(_ pid: pid_t) -> AccessibilitySnapshot {
+    private static func accessibilitySnapshot(
+        _ pid: pid_t,
+        display: DisplayInfo,
+        imageWidth: Int,
+        imageHeight: Int
+    ) -> AccessibilitySnapshot {
         let application = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(application, 2)
+        enableEnhancedAccessibility(application, pid: pid)
         let window = elementAttribute(application, kAXFocusedWindowAttribute)
         let windowInfo = window.map {
-            WindowInfo(title: stringAttribute($0, kAXTitleAttribute), frame: elementFrame($0))
+            WindowInfo(
+                title: stringAttribute($0, kAXTitleAttribute),
+                frame: elementFrame($0).flatMap {
+                    imageRect($0, imageWidth: imageWidth, imageHeight: imageHeight, frame: display.frame)
+                }
+            )
         }
         var elements: [ElementInfo] = []
         var refs: [String: AXUIElement] = [:]
@@ -518,13 +555,16 @@ enum Desktop {
                     enabled: boolAttribute(element, kAXEnabledAttribute) ?? true,
                     focused: boolAttribute(element, kAXFocusedAttribute) ?? false,
                     secure: secure,
-                    frame: elementFrame(element),
+                    frame: elementFrame(element).flatMap {
+                        imageRect($0, imageWidth: imageWidth, imageHeight: imageHeight, frame: display.frame)
+                    },
                     actions: actionNames(element)
                 ))
             }
             for child in children(element) {
                 visit(child, depth: depth + 1)
-                if truncated { break }
+                if visited >= maximumVisitedElements ||
+                    elements.count >= maximumElements || Date() >= deadline { break }
             }
         }
 
@@ -542,6 +582,22 @@ enum Desktop {
         let application = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(application, 2)
         return elementAttribute(application, kAXFocusedWindowAttribute)
+    }
+
+    private static func enableEnhancedAccessibility(_ application: AXUIElement, pid: pid_t) {
+        guard !enhancedAccessibilityPIDs.contains(pid) else { return }
+        let result = AXUIElementSetAttributeValue(
+            application,
+            "AXEnhancedUserInterface" as CFString,
+            kCFBooleanTrue
+        )
+        guard result == .success else { return }
+        enhancedAccessibilityPIDs.insert(pid)
+        Thread.sleep(forTimeInterval: 2.1)
+    }
+
+    static func preservesObservation(after failure: DesktopFailure) -> Bool {
+        failure.code == "coordinate_out_of_bounds"
     }
 
     private static func focusedWindowMatches(_ observation: ObservationContext) -> Bool {
@@ -573,7 +629,12 @@ enum Desktop {
     }
 
     private static func children(_ element: AXUIElement) -> [AXUIElement] {
-        attribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+        var result = attribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+        let contents = attribute(element, kAXContentsAttribute) as? [AXUIElement] ?? []
+        for content in contents where !result.contains(where: { CFEqual($0, content) }) {
+            result.append(content)
+        }
+        return result
     }
 
     private static func actionNames(_ element: AXUIElement) -> [String] {
@@ -859,7 +920,7 @@ enum Desktop {
         ) else {
             throw DesktopFailure(
                 code: "coordinate_out_of_bounds",
-                message: "Coordinates are outside the screenshot"
+                message: "Coordinates are outside the screenshot; correct them and reuse this observation."
             )
         }
         return point

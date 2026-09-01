@@ -111,6 +111,26 @@ final class ProtocolTests: XCTestCase {
         XCTAssertNil(Desktop.screenPoint(x: 0, y: 100, imageWidth: 200, imageHeight: 100, frame: frame))
     }
 
+    func testAccessibilityFramesUseScreenshotCoordinates() {
+        let display = RectInfo(x: -1920, y: 120, width: 1920, height: 1080)
+        let element = RectInfo(x: -960, y: 390, width: 480, height: 270)
+        let rect = Desktop.imageRect(element, imageWidth: 1600, imageHeight: 900, frame: display)
+
+        XCTAssertEqual(rect?.x, 800)
+        XCTAssertEqual(rect?.y, 225)
+        XCTAssertEqual(rect?.width, 400)
+        XCTAssertEqual(rect?.height, 225)
+    }
+
+    func testOnlyCoordinateBoundsFailuresPreserveObservation() {
+        XCTAssertTrue(Desktop.preservesObservation(
+            after: DesktopFailure(code: "coordinate_out_of_bounds", message: "outside")
+        ))
+        XCTAssertFalse(Desktop.preservesObservation(
+            after: DesktopFailure(code: "input_failed", message: "failed")
+        ))
+    }
+
     func testSecureTextFieldClassification() {
         XCTAssertTrue(Desktop.isSecure(role: "AXSecureTextField", subrole: nil))
         XCTAssertTrue(Desktop.isSecure(role: "AXTextField", subrole: "AXSecureTextField"))

@@ -1,8 +1,9 @@
 defmodule Eva.Extension.DesktopMacTest do
   use ExUnit.Case, async: true
 
-  alias Eva.Extension.DesktopMac.Tools
   alias Eva.Core.Agent.Messages
+  alias Eva.Extension.DesktopMac
+  alias Eva.Extension.DesktopMac.Tools
 
   test "exposes exactly the three desktop tools" do
     assert Tools.definitions() |> Enum.map(& &1.name) ==
@@ -44,6 +45,44 @@ defmodule Eva.Extension.DesktopMacTest do
 
   test "guidelines warn about untrusted screen content" do
     assert Enum.any?(Tools.guidelines(), &String.contains?(&1, "prompt-injection"))
+    assert Enum.any?(Tools.guidelines(), &String.contains?(&1, "Never rescale"))
+    assert Enum.any?(Tools.guidelines(), &String.contains?(&1, "target ref"))
+  end
+
+  test "keeps only the latest desktop observation in provider context" do
+    assert {:ok, %{hooks: [:context]}} = DesktopMac.setup(%{})
+
+    old_desktop_result = %Messages.ToolResultMessage{
+      tool_name: "desktop_observe",
+      content: [
+        %Messages.TextContent{text: "old desktop metadata"},
+        %Messages.ImageContent{data: "old-desktop-image", mime_type: "image/png"}
+      ]
+    }
+
+    other_tool_result = %Messages.ToolResultMessage{
+      tool_name: "other_tool",
+      content: [
+        %Messages.ImageContent{data: "other-tool-image", mime_type: "image/png"}
+      ]
+    }
+
+    latest_desktop_result = %Messages.ToolResultMessage{
+      tool_name: "desktop_action",
+      content: [
+        %Messages.TextContent{text: "latest desktop metadata"},
+        %Messages.ImageContent{data: "latest-desktop-image", mime_type: "image/png"}
+      ]
+    }
+
+    messages = [old_desktop_result, other_tool_result, latest_desktop_result]
+
+    assert {{:ok, transformed}, :state} =
+             DesktopMac.handle_hook(:context, messages, :state)
+
+    assert [old_result, ^other_tool_result, ^latest_desktop_result] = transformed
+    assert old_result.content == [%Messages.TextContent{text: "Superseded desktop observation."}]
+    assert old_desktop_result.content != old_result.content
   end
 
   test "observation results expose image content without duplicating base64 in details" do
