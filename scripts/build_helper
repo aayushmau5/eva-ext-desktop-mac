@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+NATIVE="$ROOT/native/EvaDesktopHelper"
+APP_DIR="$ROOT/priv/EvaDesktopHelper.app"
+BINARY="$NATIVE/.build/release/EvaDesktopHelper"
+
+echo "Building EvaDesktopHelper (release)..."
+swift build --package-path "$NATIVE" -c release
+
+if [ ! -x "$BINARY" ]; then
+  echo "error: build produced no binary at $BINARY" >&2
+  exit 1
+fi
+
+echo "Assembling $APP_DIR ..."
+rm -rf "$APP_DIR"
+mkdir -p "$APP_DIR/Contents/MacOS"
+cp "$BINARY" "$APP_DIR/Contents/MacOS/EvaDesktopHelper"
+cp "$NATIVE/Info.plist" "$APP_DIR/Contents/Info.plist"
+
+echo "Ad-hoc signing..."
+codesign --force --sign - "$APP_DIR"
+
+echo "Done: $APP_DIR"
