@@ -94,6 +94,27 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(response.error?.code, "automation_paused")
     }
 
+    func testActionListSupportsSingleActionsAndBatches() throws {
+        let single = try Desktop.actionList(from: ["kind": .string("wait")])
+        let batch = try Desktop.actionList(from: ["actions": .array([
+            .object(["kind": .string("click"), "x": .number(1), "y": .number(2)]),
+            .object(["kind": .string("type"), "text": .string("hello")]),
+        ])])
+
+        XCTAssertEqual(single.count, 1)
+        XCTAssertEqual(batch.count, 2)
+        XCTAssertEqual(batch[1]["kind"]?.stringValue, "type")
+    }
+
+    func testActionListRejectsInvalidBatchesBeforeExecution() {
+        XCTAssertThrowsError(try Desktop.actionList(from: ["actions": .array([])]))
+        XCTAssertThrowsError(try Desktop.actionList(from: [
+            "kind": .string("wait"),
+            "actions": .array([.object(["kind": .string("wait")])]),
+        ]))
+        XCTAssertThrowsError(try Desktop.actionList(from: ["actions": .array([.string("wait")])]))
+    }
+
     func testCoordinateMappingIncludesDisplayOriginAndScaling() {
         let frame = RectInfo(x: -1920, y: 120, width: 1920, height: 1080)
         let point = Desktop.screenPoint(

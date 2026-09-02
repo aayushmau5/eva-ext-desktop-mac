@@ -18,8 +18,8 @@ The extension registers exactly three sequential tools:
 - `desktop_status` reports permission, automation, foreground-app, and display state.
 - `desktop_observe` returns a JPEG screenshot plus a bounded accessibility snapshot and
   ephemeral element references.
-- `desktop_action` performs one click, type, key, scroll, wait, double-click, or drag and
-  returns a fresh observation.
+- `desktop_action` performs one action or a deterministic batch of up to ten actions, then
+  returns one fresh observation.
 
 Accessibility element frames and coordinate actions use pixels in the latest screenshot.
 They are mapped into the selected display's global macOS point coordinates, including Retina

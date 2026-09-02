@@ -162,6 +162,7 @@ enum Desktop {
     private static let maximumVisitedElements = 1_000
     private static let maximumTreeDepth = 12
     private static let maximumTextLength = 200
+    private static let maximumActions = 10
     private static var currentObservation: ObservationContext?
     private static var enhancedAccessibilityPIDs: Set<pid_t> = []
 
@@ -344,8 +345,13 @@ enum Desktop {
         guard let object = params.objectValue else {
             return .failure(DesktopFailure.invalid("params must be an object"))
         }
-        guard let kind = object["kind"]?.stringValue else {
-            return .failure(DesktopFailure.invalid("kind is required"))
+        let actions: [[String: JSONValue]]
+        do {
+            actions = try actionList(from: object)
+        } catch let failure as DesktopFailure {
+            return .failure(failure)
+        } catch {
+            return .failure(DesktopFailure.invalid(error.localizedDescription))
         }
         guard let observationID = object["observation_id"]?.stringValue,
               let observation = currentObservation,
@@ -367,9 +373,19 @@ enum Desktop {
         }
 
         currentObservation = nil
+        var completedActions = 0
         do {
-            try perform(kind, object, observation)
-            if kind != "wait" { Thread.sleep(forTimeInterval: 0.2) }
+            for (index, action) in actions.enumerated() {
+                let kind = action["kind"]!.stringValue!
+                try perform(kind, action, observation)
+                completedActions += 1
+                if index < actions.count - 1, kind != "wait" {
+                    Thread.sleep(forTimeInterval: 0.05)
+                }
+            }
+            if actions.last?["kind"]?.stringValue != "wait" {
+                Thread.sleep(forTimeInterval: 0.2)
+            }
             switch observe(.object(["display_id": .string(observation.display.id)])) {
             case .success(let result):
                 return .success(result)
@@ -380,11 +396,41 @@ enum Desktop {
                 ))
             }
         } catch let failure as DesktopFailure {
-            if preservesObservation(after: failure) { currentObservation = observation }
-            return .failure(failure)
+            if completedActions == 0, preservesObservation(after: failure) {
+                currentObservation = observation
+            }
+            return .failure(DesktopFailure(
+                code: failure.code,
+                message: "Action \(completedActions + 1) failed: \(failure.message)"
+            ))
         } catch {
             return .failure(DesktopFailure(code: "input_failed", message: error.localizedDescription))
         }
+    }
+
+    static func actionList(from params: [String: JSONValue]) throws -> [[String: JSONValue]] {
+        if let value = params["actions"] {
+            guard params["kind"] == nil else {
+                throw DesktopFailure.invalid("pass either kind or actions, not both")
+            }
+            guard let values = value.arrayValue, !values.isEmpty,
+                  values.count <= maximumActions else {
+                throw DesktopFailure.invalid("actions must contain between 1 and \(maximumActions) entries")
+            }
+            let actions = values.compactMap(\.objectValue)
+            guard actions.count == values.count else {
+                throw DesktopFailure.invalid("every action must be an object")
+            }
+            for (index, action) in actions.enumerated() where action["kind"]?.stringValue == nil {
+                throw DesktopFailure.invalid("actions[\(index)].kind is required")
+            }
+            return actions
+        }
+
+        guard params["kind"]?.stringValue != nil else {
+            throw DesktopFailure.invalid("kind is required")
+        }
+        return [params]
     }
 
     // MARK: Capture
@@ -795,6 +841,15 @@ enum Desktop {
             }
             guard result == .success else {
                 throw DesktopFailure(code: "input_failed", message: "Could not focus target")
+            }
+            if params["replace"]?.boolValue == true {
+                let replacement = AXUIElementSetAttributeValue(
+                    element, kAXValueAttribute as CFString, text as CFString
+                )
+                if replacement == .success { return }
+                if replacement == .invalidUIElement {
+                    throw DesktopFailure(code: "stale_element", message: "Observe again before typing.")
+                }
             }
         }
         if params["replace"]?.boolValue == true { try pressKeys(["CMD", "A"]) }

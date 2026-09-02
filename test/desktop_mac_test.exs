@@ -46,15 +46,30 @@ defmodule Eva.Extension.DesktopMacTest do
     assert description =~ "RETURN"
   end
 
-  test "desktop_action requires kind and observation_id" do
+  test "desktop_action accepts a single action or a bounded batch" do
     action = Enum.find(Tools.definitions(), &(&1.name == "desktop_action"))
-    assert action.input_schema["required"] == ["kind", "observation_id"]
+
+    assert action.input_schema["required"] == ["observation_id"]
+    assert get_in(action.input_schema, ["properties", "actions", "minItems"]) == 1
+    assert get_in(action.input_schema, ["properties", "actions", "maxItems"]) == 10
   end
 
   test "guidelines warn about untrusted screen content" do
     assert Enum.any?(Tools.guidelines(), &String.contains?(&1, "prompt-injection"))
     assert Enum.any?(Tools.guidelines(), &String.contains?(&1, "Never rescale"))
     assert Enum.any?(Tools.guidelines(), &String.contains?(&1, "target ref"))
+    assert Enum.any?(Tools.guidelines(), &String.contains?(&1, "browser address bar"))
+    assert Enum.any?(Tools.guidelines(), &String.contains?(&1, "click and type"))
+    assert Enum.any?(Tools.guidelines(), &String.contains?(&1, "do not repeat"))
+  end
+
+  test "desktop_action tells the model not to loop on focus clicks" do
+    action = Enum.find(Tools.definitions(), &(&1.name == "desktop_action"))
+
+    assert action.prompt_snippet =~ "coordinate click then type in one actions batch"
+    assert action.prompt_snippet =~ "never repeat it only to verify focus"
+    assert action.prompt_snippet =~ "Cmd+Shift+N"
+    assert action.prompt_snippet =~ "type with target and replace: true"
   end
 
   test "keeps only the latest desktop observation in provider context" do
@@ -134,5 +149,25 @@ defmodule Eva.Extension.DesktopMacTest do
     assert result.details["error"] == "invalid_arguments"
     assert [%Messages.TextContent{text: text}] = result.content
     assert text =~ "unsupported key"
+  end
+
+  test "desktop_action validates every action in a batch before calling the helper" do
+    action = Enum.find(Tools.definitions(), &(&1.name == "desktop_action"))
+
+    result =
+      action.executor.(
+        %{
+          "observation_id" => "o1",
+          "actions" => [
+            %{"kind" => "wait", "milliseconds" => 10},
+            %{"kind" => "click"}
+          ]
+        },
+        %{}
+      )
+
+    assert result.details["error"] == "invalid_arguments"
+    assert [%Messages.TextContent{text: text}] = result.content
+    assert text =~ "actions[1]: click requires target or x and y"
   end
 end
